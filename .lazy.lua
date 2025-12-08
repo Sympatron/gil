@@ -10,12 +10,12 @@ return {
 							cargo = {
 								allFeatures = false,
 								noDefaultFeatures = true,
-								features = { "futures" },
+								features = { "async" },
 							},
 							checkOnSave = {
 								allFeatures = false,
 								noDefaultFeatures = true,
-								features = { "futures" },
+								features = { "async" },
 							},
 						},
 					},

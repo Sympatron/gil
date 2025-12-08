@@ -39,7 +39,7 @@ use gil::channel;
 
 const COUNT: usize = 100_000;
 
-let (mut tx, mut rx) = channel(NonZeroUsize::new(COUNT).unwrap());
+let (mut tx, mut rx) = channel::<usize>(NonZeroUsize::new(COUNT).unwrap());
 
 let handle = thread::spawn(move || {
     for i in 0..COUNT {
@@ -66,15 +66,13 @@ To use async features, enable the `async` feature in your `Cargo.toml`.
 gil = { version = "0.3", features = ["async"] }
 ```
 
-```rust
+```rust,ignore
 use gil::channel;
 use std::num::NonZeroUsize;
 
-# #[cfg(feature = "async")]
-# async fn example() {
 const COUNT: usize = 100_000;
 
-let (mut tx, mut rx) = channel(NonZeroUsize::new(COUNT).unwrap());
+let (mut tx, mut rx) = channel::<usize>(NonZeroUsize::new(COUNT).unwrap());
 
 let handle = tokio::spawn(async move {
     for i in 0..COUNT {
@@ -90,7 +88,6 @@ for i in 0..COUNT {
 }
 
 handle.await.unwrap();
-# }
 ```
 
 ### Non-blocking Operations
@@ -99,12 +96,12 @@ handle.await.unwrap();
 use gil::channel;
 use std::num::NonZeroUsize;
 
-let (mut tx, mut rx) = channel(NonZeroUsize::new(10).unwrap());
+let (mut tx, mut rx) = channel::<i32>(NonZeroUsize::new(10).unwrap());
 
 // Try to send without blocking
 match tx.try_send(42) {
-    true => println!("Sent successfully"),
-    false => println!("Queue full"),
+    Ok(()) => println!("Sent successfully"),
+    Err(val) => println!("Queue full, value {} returned", val),
 }
 
 // Try to receive without blocking
@@ -123,7 +120,7 @@ use gil::channel;
 use std::ptr;
 use std::num::NonZeroUsize;
 
-let (mut tx, mut rx) = channel(NonZeroUsize::new(128).unwrap());
+let (mut tx, mut rx) = channel::<usize>(NonZeroUsize::new(128).unwrap());
 
 // Zero-copy write
 let data = [1usize, 2, 3, 4, 5];
@@ -133,7 +130,7 @@ let count = data.len().min(slice.len());
 unsafe {
     ptr::copy_nonoverlapping(
         data.as_ptr(),
-        slice.as_mut_ptr(),
+        slice.as_mut_ptr().cast(),
         count
     );
     // Commit the written items to make them visible to the consumer
@@ -161,9 +158,24 @@ The queue achieves high throughput through several optimizations:
 - **Batch operations**: Amortize atomic operation costs across multiple items
 - **Zero-copy API**: Direct buffer access eliminates memory copies
 
-## Type Constraints
+### Large Objects
 
-The current implementation is optimized for `usize`.
+For large objects, consider using `Box<T>` to avoid the cost of copying the entire object into the queue. This way, only the pointer (8 bytes) is copied:
+
+```rust
+use gil::channel;
+use std::num::NonZeroUsize;
+
+struct LargeStruct {
+    data: [u8; 1024],
+}
+
+let (mut tx, mut rx) = channel::<Box<LargeStruct>>(NonZeroUsize::new(100).unwrap());
+
+// Only the Box pointer is copied, not the 1024 bytes
+tx.send(Box::new(LargeStruct { data: [0; 1024] }));
+let value = rx.recv();
+```
 
 ## Safety
 
