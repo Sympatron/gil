@@ -2,8 +2,9 @@ use std::{
     hint::{black_box, spin_loop},
     num::NonZeroUsize,
     ptr,
+    sync::{Arc, Barrier},
     thread::spawn,
-    time::{Duration, SystemTime},
+    time::{Duration, Instant, SystemTime},
 };
 
 use criterion::{
@@ -425,6 +426,80 @@ fn benchmark(c: &mut Criterion) {
     }
 }
 
+fn large_queue_benchmark(c: &mut Criterion) {
+    let mut group = c.benchmark_group("large_queue");
+    group.measurement_time(Duration::from_secs(5));
+    group.warm_up_time(Duration::from_secs(1));
+
+    const ITERS: usize = 5_000_000;
+
+    group.throughput(Throughput::Elements(ITERS as u64));
+
+    group.bench_function("uncontended_throughput", |b| {
+        b.iter_custom(|measurement_iters| {
+            let mut total_duration = Duration::ZERO;
+
+            for _ in 0..measurement_iters {
+                // "Queue is so long that there is no contention between threads."
+                // Capacity = 2 * ITERS
+                let capacity = NonZeroUsize::new((2 * ITERS).next_power_of_two()).unwrap();
+                let (mut p, mut c) = channel::<u8>(capacity);
+
+                // Pre-fill
+                for i in 0..ITERS {
+                    p.try_send(i as u8).unwrap();
+                }
+
+                let barrier = Arc::new(Barrier::new(3));
+
+                let push_thread = {
+                    let barrier = Arc::clone(&barrier);
+                    spawn(move || {
+                        barrier.wait();
+                        let start_pushing = Instant::now();
+                        for i in 0..ITERS {
+                            p.try_send(i as u8).unwrap();
+                        }
+                        let stop_pushing = Instant::now();
+                        (start_pushing, stop_pushing)
+                    })
+                };
+
+                let trigger_thread = {
+                    let barrier = Arc::clone(&barrier);
+                    spawn(move || {
+                        // "Try to force other threads to go to sleep on barrier."
+                        std::thread::yield_now();
+                        std::thread::yield_now();
+                        std::thread::yield_now();
+                        barrier.wait();
+                    })
+                };
+
+                barrier.wait();
+                let start_popping = Instant::now();
+                for _ in 0..ITERS {
+                    black_box(c.try_recv().unwrap());
+                }
+                let stop_popping = Instant::now();
+
+                let (start_pushing, stop_pushing) = push_thread.join().unwrap();
+                trigger_thread.join().unwrap();
+
+                // "The total time is the max end time minus the min start time"
+                let total = stop_pushing
+                    .max(stop_popping)
+                    .duration_since(start_pushing.min(start_popping));
+
+                total_duration += total;
+            }
+            total_duration
+        })
+    });
+
+    group.finish();
+}
+
 #[cfg(feature = "async")]
 fn benchmark_async(c: &mut Criterion) {
     use criterion::async_executor::FuturesExecutor;
@@ -535,9 +610,9 @@ fn benchmark_async(c: &mut Criterion) {
 }
 
 #[cfg(feature = "async")]
-criterion_group! {benches, benchmark, benchmark_async}
+criterion_group! {benches, benchmark, large_queue_benchmark, benchmark_async}
 
 #[cfg(not(feature = "async"))]
-criterion_group! {benches, benchmark}
+criterion_group! {benches, benchmark, large_queue_benchmark}
 
 criterion_main! {benches}
