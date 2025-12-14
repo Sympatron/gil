@@ -17,44 +17,18 @@ impl<T> Sender<T> {
     }
 
     pub fn send(&mut self, value: T) {
-        let mut new_tail = self.local_reserved + 1;
+        let old_tail = self.ptr.reserved().fetch_add(1, Ordering::AcqRel);
 
-        loop {
-            while new_tail > self.ptr.head().load(Ordering::Acquire) + self.ptr.size {
-                hint::spin_loop();
-            }
-
-            match self.ptr.reserved().compare_exchange_weak(
-                self.local_reserved,
-                new_tail,
-                Ordering::AcqRel,
-                Ordering::Acquire,
-            ) {
-                Err(cur_reserved) => self.local_reserved = cur_reserved,
-                Ok(_) => break,
-            }
-
-            new_tail = self.local_reserved + 1;
-
+        while old_tail >= self.ptr.head().load(Ordering::Acquire) + self.ptr.size {
             hint::spin_loop();
         }
 
-        unsafe { self.ptr.set(self.local_reserved, value) };
-        loop {
-            match self.ptr.tail().compare_exchange_weak(
-                new_tail - 1,
-                new_tail,
-                Ordering::AcqRel,
-                Ordering::Acquire,
-            ) {
-                Ok(_) => break,
-                Err(cur_tail) => self.local_tail = cur_tail,
-            }
-            hint::spin_loop();
-        }
+        unsafe { self.ptr.set(old_tail, value) };
 
-        self.local_reserved = new_tail;
-        self.local_tail = new_tail;
+        while old_tail > self.ptr.tail().load(Ordering::Relaxed) {
+            crate::thread::yield_now();
+        }
+        self.ptr.tail().fetch_add(1, Ordering::Relaxed);
     }
 
     pub fn try_send(&mut self, value: T) -> Result<(), T> {
