@@ -35,13 +35,12 @@ fn make_group<'a>(c: &'a mut Criterion, name: &str) -> BenchmarkGroup<'a, WallTi
 }
 
 fn benchmark(c: &mut Criterion) {
-    const SIZES: [NonZeroUsize; 3] = [
+    const SIZES: [NonZeroUsize; 2] = [
         NonZeroUsize::new(512).unwrap(),
         NonZeroUsize::new(4096).unwrap(),
-        NonZeroUsize::new(65_536).unwrap(),
     ];
 
-    const SENDER_COUNTS: [usize; 4] = [1, 8, 128, 1024];
+    const SENDER_COUNTS: [usize; 2] = [2, 8];
 
     // ==================== PUSH LATENCY ====================
     let mut group = make_group(c, "push_latency");
