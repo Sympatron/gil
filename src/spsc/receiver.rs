@@ -1,4 +1,4 @@
-use crate::{atomic::Ordering, hint, queue::QueuePtr};
+use crate::{atomic::Ordering, hint, spsc::queue::QueuePtr};
 
 /// The consumer end of the queue.
 ///

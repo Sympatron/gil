@@ -1,6 +1,6 @@
 use std::mem::MaybeUninit;
 
-use crate::{atomic::Ordering, hint, queue::QueuePtr};
+use crate::{atomic::Ordering, hint, spsc::queue::QueuePtr};
 
 /// The producer end of the queue.
 ///
@@ -30,9 +30,9 @@ impl<T> Sender<T> {
     pub fn try_send(&mut self, value: T) -> Result<(), T> {
         let new_tail = self.local_tail + 1;
 
-        if new_tail >= self.local_head + self.ptr.size {
+        if new_tail > self.max_tail() {
             self.load_head();
-            if new_tail == self.local_head {
+            if new_tail > self.max_tail() {
                 return Err(value);
             }
         }
@@ -51,7 +51,7 @@ impl<T> Sender<T> {
     pub fn send(&mut self, value: T) {
         let new_tail = self.local_tail + 1;
 
-        while new_tail >= self.local_head + self.ptr.size {
+        while new_tail > self.max_tail() {
             hint::spin_loop();
             self.load_head();
         }
@@ -70,16 +70,16 @@ impl<T> Sender<T> {
 
         let new_tail = self.local_tail + 1;
 
-        if new_tail >= self.local_head + self.ptr.size {
+        if new_tail > self.max_tail() {
             futures::future::poll_fn(|ctx| {
                 self.load_head();
-                if new_tail >= self.local_head + self.ptr.size {
+                if new_tail > self.max_tail() {
                     self.ptr.register_sender_waker(ctx.waker());
                     self.ptr.sender_sleeping().store(true, Ordering::SeqCst);
 
                     // prevent lost wake
                     self.local_head = self.ptr.head().load(Ordering::SeqCst);
-                    if new_tail >= self.local_head {
+                    if new_tail > self.max_tail() {
                         return Poll::Pending;
                     }
 
@@ -160,6 +160,11 @@ impl<T> Sender<T> {
         let new_tail = self.local_tail + len;
         self.store_tail(new_tail);
         self.local_tail = new_tail;
+    }
+
+    #[inline(always)]
+    fn max_tail(&self) -> usize {
+        self.local_head + self.ptr.size
     }
 
     #[inline(always)]

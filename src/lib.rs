@@ -18,5 +18,4 @@ pub(crate) use loom::{
 
 pub mod mpsc;
 mod padded;
-mod queue;
 pub mod spsc;
