@@ -34,6 +34,7 @@ macro_rules! _field {
 #[repr(C)]
 struct Queue {
     head: Padded<AtomicUsize>,
+    reserved: Padded<AtomicUsize>,
     #[cfg(feature = "async")]
     sender_sleeping: Padded<AtomicBool>,
     #[cfg(feature = "async")]
@@ -95,6 +96,8 @@ impl<T> QueuePtr<T> {
         unsafe {
             ptr.write(Queue {
                 head: Padded::new(AtomicUsize::new(0)),
+                reserved: Padded::new(AtomicUsize::new(0)),
+
                 tail: Padded::new(AtomicUsize::new(0)),
 
                 #[cfg(feature = "async")]
@@ -133,6 +136,11 @@ impl<T> QueuePtr<T> {
     #[inline(always)]
     pub(crate) fn head(&self) -> &AtomicUsize {
         unsafe { _field!(self.ptr, head.value, AtomicUsize).as_ref() }
+    }
+
+    #[inline(always)]
+    pub(crate) fn reserved(&self) -> &AtomicUsize {
+        unsafe { _field!(self.ptr, reserved.value, AtomicUsize).as_ref() }
     }
 
     #[inline(always)]
