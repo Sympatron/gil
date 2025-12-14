@@ -35,7 +35,7 @@ Consumer blocks until there is a value on the queue, or use `Receiver::try_recv`
 ```rust
 use std::thread;
 use std::num::NonZeroUsize;
-use gil::channel;
+use gil::spsc::channel;
 
 const COUNT: usize = 100_000;
 
@@ -67,7 +67,7 @@ gil = { version = "0.3", features = ["async"] }
 ```
 
 ```rust,ignore
-use gil::channel;
+use gil::spsc::channel;
 use std::num::NonZeroUsize;
 
 const COUNT: usize = 100_000;
@@ -93,7 +93,7 @@ handle.await.unwrap();
 ### Non-blocking Operations
 
 ```rust
-use gil::channel;
+use gil::spsc::channel;
 use std::num::NonZeroUsize;
 
 let (mut tx, mut rx) = channel::<i32>(NonZeroUsize::new(10).unwrap());
@@ -116,7 +116,7 @@ match rx.try_recv() {
 For maximum performance, you can directly access the internal buffer. This allows you to write or read multiple items at once, bypassing the per-item synchronization overhead.
 
 ```rust
-use gil::channel;
+use gil::spsc::channel;
 use std::ptr;
 use std::num::NonZeroUsize;
 
@@ -163,7 +163,7 @@ The queue achieves high throughput through several optimizations:
 For large objects, consider using `Box<T>` to avoid the cost of copying the entire object into the queue. This way, only the pointer (8 bytes) is copied:
 
 ```rust
-use gil::channel;
+use gil::spsc::channel;
 use std::num::NonZeroUsize;
 
 struct LargeStruct {

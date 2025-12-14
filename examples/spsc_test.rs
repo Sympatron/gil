@@ -1,4 +1,4 @@
-use gil::channel;
+use gil::spsc::channel;
 use std::{hint::black_box, num::NonZeroUsize, thread::spawn, time::SystemTime};
 
 fn main() {

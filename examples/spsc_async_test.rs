@@ -3,8 +3,8 @@ use std::{hint::black_box, num::NonZeroUsize, thread::spawn, time::SystemTime};
 use futures::executor::block_on;
 
 fn latency() {
-    let (mut tx1, mut rx1) = gil::channel(NonZeroUsize::new(512).unwrap());
-    let (mut tx2, mut rx2) = gil::channel(NonZeroUsize::new(512).unwrap());
+    let (mut tx1, mut rx1) = gil::spsc::channel(NonZeroUsize::new(512).unwrap());
+    let (mut tx2, mut rx2) = gil::spsc::channel(NonZeroUsize::new(512).unwrap());
 
     let iter = 1_000_000;
 
@@ -32,7 +32,7 @@ fn latency() {
 }
 
 fn throughpuut() {
-    let (mut tx, mut rx) = gil::channel(NonZeroUsize::new(512).unwrap());
+    let (mut tx, mut rx) = gil::spsc::channel(NonZeroUsize::new(512).unwrap());
 
     let handle = spawn(move || {
         block_on(async move {

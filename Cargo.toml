@@ -22,10 +22,10 @@ loom = ["dep:loom"]
 async = ["dep:futures"]
 
 [[example]]
-name = "test"
+name = "spsc_test"
 
 [[example]]
-name = "async_test"
+name = "spsc_async_test"
 required-features = ["async"]
 
 [[bench]]

@@ -10,7 +10,7 @@ use std::{
 use criterion::{
     BenchmarkGroup, Criterion, Throughput, criterion_group, criterion_main, measurement::WallTime,
 };
-use gil::channel;
+use gil::spsc::channel;
 
 /// A 1024-byte payload for benchmarking large object transfers
 #[derive(Clone, Copy)]
@@ -469,8 +469,6 @@ fn large_queue_benchmark(c: &mut Criterion) {
                     let barrier = Arc::clone(&barrier);
                     spawn(move || {
                         // "Try to force other threads to go to sleep on barrier."
-                        std::thread::yield_now();
-                        std::thread::yield_now();
                         std::thread::yield_now();
                         barrier.wait();
                     })
