@@ -34,7 +34,7 @@ impl<T> Sender<T> {
                 self.local_tail,
                 new_tail,
                 Ordering::AcqRel,
-                Ordering::Relaxed,
+                Ordering::Acquire,
             ) {
                 Err(cur_tail) => self.local_tail = cur_tail,
                 Ok(_) => break,
