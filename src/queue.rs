@@ -51,7 +51,8 @@ struct Queue {
 pub(crate) struct QueuePtr<T> {
     ptr: NonNull<Queue>,
     buffer: NonNull<T>,
-    pub(crate) capacity: usize,
+    pub(crate) size: usize,
+    pub(crate) mask: usize,
     _marker: PhantomData<T>,
 }
 
@@ -62,16 +63,18 @@ impl<T> Clone for QueuePtr<T> {
         Self {
             ptr: self.ptr,
             buffer: self.buffer,
-            capacity: self.capacity,
+            size: self.size,
+            mask: self.mask,
             _marker: PhantomData,
         }
     }
 }
 
 impl<T> QueuePtr<T> {
-    pub(crate) fn with_capacity(capacity: NonZeroUsize) -> Self {
+    pub(crate) fn with_size(size: NonZeroUsize) -> Self {
         // Allocate exactly capacity + 1 slots (one slot is always empty to distinguish full from empty)
-        let capacity = capacity.get() + 1;
+        let size = size.get();
+        let capacity = size.next_power_of_two();
 
         let (layout, buffer_offset) = Self::layout(capacity);
 
@@ -81,7 +84,9 @@ impl<T> QueuePtr<T> {
             std::alloc::handle_alloc_error(layout);
         };
 
-        // Calculate buffer pointer
+        // calculate buffer pointer
+        // SAFETY: `ptr` is already checked by NonNull::new above, so this is guaranteed to be
+        // valid ptr too
         let buffer =
             unsafe { NonNull::new_unchecked(ptr.as_ptr().byte_add(buffer_offset).cast::<T>()) };
 
@@ -110,7 +115,8 @@ impl<T> QueuePtr<T> {
             ptr,
             buffer,
             _marker: PhantomData,
-            capacity,
+            size,
+            mask: capacity - 1,
         }
     }
 
@@ -132,18 +138,23 @@ impl<T> QueuePtr<T> {
     }
 
     #[inline(always)]
-    pub(crate) unsafe fn at(&self, index: usize) -> NonNull<T> {
+    pub(crate) unsafe fn exact_at(&self, index: usize) -> NonNull<T> {
         unsafe { NonNull::new_unchecked(self.buffer.as_ptr().add(index)) }
     }
 
     #[inline(always)]
-    pub(crate) unsafe fn get(&self, index: usize) -> T {
-        unsafe { self.at(index).read() }
+    pub(crate) unsafe fn at(&self, index: usize) -> NonNull<T> {
+        unsafe { self.exact_at(index & self.mask) }
     }
 
     #[inline(always)]
-    pub(crate) fn set(&self, index: usize, value: T) {
-        unsafe { self.at(index).write(value) }
+    pub(crate) unsafe fn get(&self, index: usize) -> T {
+        unsafe { self.at(index & self.mask).read() }
+    }
+
+    #[inline(always)]
+    pub(crate) unsafe fn set(&self, index: usize, value: T) {
+        unsafe { self.at(index & self.mask).write(value) }
     }
 }
 
@@ -200,20 +211,15 @@ impl<T> Drop for QueuePtr<T> {
     fn drop(&mut self) {
         let rc = unsafe { _field!(self.ptr, rc, AtomicUsize).as_ref() };
         if rc.fetch_sub(1, Ordering::AcqRel) == 1 {
-            let (layout, _) = Self::layout(self.capacity);
+            let (layout, _) = Self::layout(self.size);
 
             let head = self.head().load(Ordering::Relaxed);
             let tail = self.tail().load(Ordering::Relaxed);
 
             if std::mem::needs_drop::<T>() {
-                let mut idx = head;
-                while idx != tail {
+                for idx in head..tail {
                     unsafe {
                         std::ptr::drop_in_place(self.at(idx).as_ptr());
-                    }
-                    idx += 1;
-                    if idx == self.capacity {
-                        idx = 0;
                     }
                 }
             }

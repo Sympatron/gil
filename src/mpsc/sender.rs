@@ -3,7 +3,6 @@ use crate::{atomic::Ordering, hint, queue::QueuePtr};
 #[derive(Clone)]
 pub struct Sender<T> {
     ptr: QueuePtr<T>,
-    local_head: usize,
     local_tail: usize,
 }
 
@@ -11,7 +10,6 @@ impl<T> Sender<T> {
     pub(crate) fn new(queue_ptr: QueuePtr<T>) -> Self {
         Self {
             ptr: queue_ptr,
-            local_head: 0,
             local_tail: 0,
         }
     }
@@ -19,16 +17,15 @@ impl<T> Sender<T> {
     #[inline(always)]
     fn next_tail(&self) -> usize {
         let next = self.local_tail + 1;
-        if next == self.ptr.capacity { 0 } else { next }
+        if next == self.ptr.size { 0 } else { next }
     }
 
     pub fn send(&mut self, value: T) {
         let mut new_tail = self.next_tail();
 
         loop {
-            while new_tail == self.local_head {
+            while new_tail == self.ptr.head().load(Ordering::Acquire) {
                 hint::spin_loop();
-                self.load_head();
             }
             match self.ptr.tail().compare_exchange_weak(
                 self.local_tail,
@@ -44,13 +41,8 @@ impl<T> Sender<T> {
             hint::spin_loop();
         }
 
-        self.ptr.set(self.local_tail, value);
+        unsafe { self.ptr.set(self.local_tail, value) };
         self.local_tail = new_tail;
-    }
-
-    #[inline(always)]
-    fn load_head(&mut self) {
-        self.local_head = self.ptr.head().load(Ordering::Acquire);
     }
 }
 

@@ -19,12 +19,6 @@ impl<T> Receiver<T> {
         }
     }
 
-    #[inline(always)]
-    fn next_head(&self) -> usize {
-        let next = self.local_head + 1;
-        if next == self.ptr.capacity { 0 } else { next }
-    }
-
     /// Attempts to receive a value from the queue without blocking.
     ///
     /// # Returns
@@ -42,7 +36,7 @@ impl<T> Receiver<T> {
         // SAFETY: head != tail which means queue is not empty and head has valid initialised
         //         value
         let ret = unsafe { self.ptr.get(self.local_head) };
-        let new_head = self.next_head();
+        let new_head = self.local_head + 1;
         self.store_head(new_head);
         self.local_head = new_head;
 
@@ -62,7 +56,7 @@ impl<T> Receiver<T> {
         // SAFETY: head != tail which means queue is not empty and head has valid initialised
         //         value
         let ret = unsafe { self.ptr.get(self.local_head) };
-        let new_head = self.next_head();
+        let new_head = self.local_head + 1;
         self.store_head(new_head);
         self.local_head = new_head;
 
@@ -100,7 +94,7 @@ impl<T> Receiver<T> {
         // SAFETY: head != tail which means queue is not empty and head has valid initialised
         //         value
         let ret = unsafe { self.ptr.get(self.local_head) };
-        let new_head = self.next_head();
+        let new_head = self.local_head + 1;
         self.store_head(new_head);
         self.local_head = new_head;
 
@@ -123,20 +117,23 @@ impl<T> Receiver<T> {
     /// A slice containing available items starting from the current head.
     /// Note that this might not represent *all* available items if the buffer wraps around.
     pub fn read_buffer(&mut self) -> &[T] {
-        let start = self.local_head;
+        let start = self.local_head & self.ptr.mask;
+        let mut local_tail = self.local_tail & self.ptr.mask;
 
-        if start == self.local_tail {
+        // not returning early, because we will return empty buffer anyway if next == tail
+        if start == local_tail {
             self.load_tail();
+            local_tail = self.local_tail & self.ptr.mask;
         }
 
-        let end = if self.local_tail >= start {
-            self.local_tail
+        let end = if local_tail >= start {
+            local_tail
         } else {
-            self.ptr.capacity
+            self.ptr.size - 1
         };
 
         unsafe {
-            let ptr = self.ptr.at(start);
+            let ptr = self.ptr.exact_at(start);
             std::slice::from_raw_parts(ptr.as_ptr(), end - start)
         }
     }
@@ -153,10 +150,7 @@ impl<T> Receiver<T> {
     #[inline(always)]
     pub unsafe fn advance(&mut self, len: usize) {
         // the len can be just right at the edge of buffer, so we need to wrap just in case
-        let mut new_head = self.local_head + len;
-        if new_head >= self.ptr.capacity {
-            new_head -= self.ptr.capacity;
-        }
+        let new_head = self.local_head + len;
         self.store_head(new_head);
         self.local_head = new_head;
     }

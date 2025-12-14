@@ -21,12 +21,6 @@ impl<T> Sender<T> {
         }
     }
 
-    #[inline(always)]
-    fn next_tail(&self) -> usize {
-        let next = self.local_tail + 1;
-        if next == self.ptr.capacity { 0 } else { next }
-    }
-
     /// Attempts to send a value into the queue without blocking.
     ///
     /// # Returns
@@ -34,16 +28,16 @@ impl<T> Sender<T> {
     /// * `true` if the value was successfully sent.
     /// * `false` if the queue is full.
     pub fn try_send(&mut self, value: T) -> Result<(), T> {
-        let new_tail = self.next_tail();
+        let new_tail = self.local_tail + 1;
 
-        if new_tail == self.local_head {
+        if new_tail == self.local_head + self.ptr.size {
             self.load_head();
             if new_tail == self.local_head {
                 return Err(value);
             }
         }
 
-        self.ptr.set(self.local_tail, value);
+        unsafe { self.ptr.set(self.local_tail, value) };
         self.store_tail(new_tail);
         self.local_tail = new_tail;
 
@@ -55,14 +49,14 @@ impl<T> Sender<T> {
     /// This method uses a spin loop to wait for available space in the queue.
     /// For a non-blocking alternative, use [`Sender::try_send`].
     pub fn send(&mut self, value: T) {
-        let new_tail = self.next_tail();
+        let new_tail = self.local_tail + 1;
 
-        while new_tail == self.local_head {
+        while new_tail == self.local_head + self.ptr.size {
             hint::spin_loop();
             self.load_head();
         }
 
-        self.ptr.set(self.local_tail, value);
+        unsafe { self.ptr.set(self.local_tail, value) };
         self.store_tail(new_tail);
         self.local_tail = new_tail;
     }
@@ -74,9 +68,9 @@ impl<T> Sender<T> {
     pub async fn send_async(&mut self, value: T) {
         use std::task::Poll;
 
-        let new_tail = self.next_tail();
+        let new_tail = self.local_tail + 1;
 
-        if new_tail == self.local_head {
+        if new_tail == self.local_head + self.ptr.size {
             futures::future::poll_fn(|ctx| {
                 self.load_head();
                 if new_tail == self.local_head {
@@ -97,8 +91,7 @@ impl<T> Sender<T> {
             .await;
         }
 
-        let new_tail = self.next_tail();
-        self.ptr.set(self.local_tail, value);
+        unsafe { self.ptr.set(self.local_tail, value) };
         self.store_tail(new_tail);
         self.local_tail = new_tail;
 
@@ -126,23 +119,23 @@ impl<T> Sender<T> {
     /// [`copy_nonoverlapping`](std::ptr::copy_nonoverlapping) if you want fast copying between
     /// this and your own data.
     pub fn write_buffer(&mut self) -> &mut [MaybeUninit<T>] {
-        let start = self.local_tail;
-        let next = self.next_tail();
+        let next = self.local_tail + 1;
 
+        // not returning early, because we will return empty buffer anyway if next == head
         if next == self.local_head {
             self.load_head();
         }
 
-        let end = if self.local_head > start {
-            self.local_head - 1
-        } else if self.local_head == 0 {
-            self.ptr.capacity - 1
+        let start = self.local_tail & self.ptr.mask;
+        let local_head = self.local_head & self.ptr.mask;
+        let end = if local_head > start {
+            local_head - 1
         } else {
-            self.ptr.capacity
+            self.ptr.size
         };
 
         unsafe {
-            let ptr = self.ptr.at(start).cast();
+            let ptr = self.ptr.exact_at(start).cast();
             std::slice::from_raw_parts_mut(ptr.as_ptr(), end - start)
         }
     }
@@ -157,10 +150,7 @@ impl<T> Sender<T> {
     #[inline(always)]
     pub unsafe fn commit(&mut self, len: usize) {
         // the len can be just right at the edge of buffer, so we need to wrap just in case
-        let mut new_tail = self.local_tail + len;
-        if new_tail >= self.ptr.capacity {
-            new_tail -= self.ptr.capacity;
-        }
+        let new_tail = self.local_tail + len;
         self.store_tail(new_tail);
         self.local_tail = new_tail;
     }

@@ -22,7 +22,7 @@ impl<T> Receiver<T> {
     #[inline(always)]
     fn next_head(&self) -> usize {
         let next = self.local_head + 1;
-        if next == self.ptr.capacity { 0 } else { next }
+        if next == self.ptr.size { 0 } else { next }
     }
 
     pub fn recv(&mut self) -> T {

@@ -7,7 +7,7 @@ mod receiver;
 mod sender;
 
 pub fn channel<T>(capacity: NonZeroUsize) -> (Sender<T>, Receiver<T>) {
-    let queue = QueuePtr::with_capacity(capacity);
+    let queue = QueuePtr::with_size(capacity);
     (Sender::new(queue.clone()), Receiver::new(queue))
 }
 
