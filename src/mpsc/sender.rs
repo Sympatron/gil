@@ -30,7 +30,7 @@ impl<T> Sender<T> {
         let mut new_tail = self.local_reserved + 1;
 
         loop {
-            while new_tail == self.ptr.head().load(Ordering::Acquire) + self.ptr.size {
+            while new_tail > self.ptr.head().load(Ordering::Acquire) + self.ptr.size {
                 hint::spin_loop();
             }
             match self.reserved().compare_exchange_weak(

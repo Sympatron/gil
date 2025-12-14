@@ -26,9 +26,9 @@ impl<T> Receiver<T> {
     /// * `Some(value)` if a value is available.
     /// * `None` if the queue is empty.
     pub fn try_recv(&mut self) -> Option<T> {
-        if self.local_head >= self.local_tail {
+        if self.local_head == self.local_tail {
             self.load_tail();
-            if self.local_head >= self.local_tail {
+            if self.local_head == self.local_tail {
                 return None;
             }
         }
@@ -48,7 +48,7 @@ impl<T> Receiver<T> {
     /// This method uses a spin loop to wait for available data in the queue.
     /// For a non-blocking alternative, use [`Receiver::try_recv`].
     pub fn recv(&mut self) -> T {
-        while self.local_head >= self.local_tail {
+        while self.local_head == self.local_tail {
             hint::spin_loop();
             self.load_tail();
         }
@@ -70,16 +70,16 @@ impl<T> Receiver<T> {
     pub async fn recv_async(&mut self) -> T {
         use std::task::Poll;
 
-        if self.local_head >= self.local_tail {
+        if self.local_head == self.local_tail {
             futures::future::poll_fn(|ctx| {
                 self.load_tail();
-                if self.local_head >= self.local_tail {
+                if self.local_head == self.local_tail {
                     self.ptr.register_receiver_waker(ctx.waker());
                     self.ptr.receiver_sleeping().store(true, Ordering::SeqCst);
 
                     // prevent lost wake
                     self.local_tail = self.ptr.tail().load(Ordering::SeqCst);
-                    if self.local_head >= self.local_tail {
+                    if self.local_head == self.local_tail {
                         return Poll::Pending;
                     }
 
