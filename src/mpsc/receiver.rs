@@ -35,6 +35,24 @@ impl<T> Receiver<T> {
         ret
     }
 
+    pub fn try_recv(&mut self) -> Option<T> {
+        if self.local_head == self.local_tail {
+            self.load_tail();
+            if self.local_head == self.local_tail {
+                return None;
+            }
+        }
+
+        // SAFETY: head != tail which means queue is not empty and head has valid initialised
+        //         value
+        let ret = unsafe { self.ptr.get(self.local_head) };
+        let new_head = self.local_head + 1;
+        self.store_head(new_head);
+        self.local_head = new_head;
+
+        Some(ret)
+    }
+
     #[inline(always)]
     fn store_head(&self, value: usize) {
         self.ptr.head().store(value, Ordering::Release);
