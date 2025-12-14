@@ -30,7 +30,7 @@ impl<T> Sender<T> {
     pub fn try_send(&mut self, value: T) -> Result<(), T> {
         let new_tail = self.local_tail + 1;
 
-        if new_tail == self.local_head + self.ptr.size {
+        if new_tail >= self.local_head + self.ptr.size {
             self.load_head();
             if new_tail == self.local_head {
                 return Err(value);
@@ -51,7 +51,7 @@ impl<T> Sender<T> {
     pub fn send(&mut self, value: T) {
         let new_tail = self.local_tail + 1;
 
-        while new_tail == self.local_head + self.ptr.size {
+        while new_tail >= self.local_head + self.ptr.size {
             hint::spin_loop();
             self.load_head();
         }
@@ -70,16 +70,16 @@ impl<T> Sender<T> {
 
         let new_tail = self.local_tail + 1;
 
-        if new_tail == self.local_head + self.ptr.size {
+        if new_tail >= self.local_head + self.ptr.size {
             futures::future::poll_fn(|ctx| {
                 self.load_head();
-                if new_tail == self.local_head {
+                if new_tail >= self.local_head + self.ptr.size {
                     self.ptr.register_sender_waker(ctx.waker());
                     self.ptr.sender_sleeping().store(true, Ordering::SeqCst);
 
                     // prevent lost wake
                     self.local_head = self.ptr.head().load(Ordering::SeqCst);
-                    if new_tail == self.local_head {
+                    if new_tail >= self.local_head {
                         return Poll::Pending;
                     }
 
@@ -119,24 +119,20 @@ impl<T> Sender<T> {
     /// [`copy_nonoverlapping`](std::ptr::copy_nonoverlapping) if you want fast copying between
     /// this and your own data.
     pub fn write_buffer(&mut self) -> &mut [MaybeUninit<T>] {
-        let next = self.local_tail + 1;
+        let mut available = self.ptr.size - (self.local_tail - self.local_head);
 
-        // not returning early, because we will return empty buffer anyway if next == head
-        if next == self.local_head {
+        if available == 0 {
             self.load_head();
+            available = self.ptr.size - (self.local_tail - self.local_head);
         }
 
         let start = self.local_tail & self.ptr.mask;
-        let local_head = self.local_head & self.ptr.mask;
-        let end = if local_head > start {
-            local_head - 1
-        } else {
-            self.ptr.size
-        };
+        let contiguous = self.ptr.capacity - start;
+        let len = available.min(contiguous);
 
         unsafe {
             let ptr = self.ptr.exact_at(start).cast();
-            std::slice::from_raw_parts_mut(ptr.as_ptr(), end - start)
+            std::slice::from_raw_parts_mut(ptr.as_ptr(), len)
         }
     }
 
@@ -149,6 +145,17 @@ impl<T> Sender<T> {
     /// * Committing more items than available in the buffer slice will result in undefined behavior.
     #[inline(always)]
     pub unsafe fn commit(&mut self, len: usize) {
+        #[cfg(debug_assertions)]
+        {
+            let start = self.local_tail & self.ptr.mask;
+            let contiguous = self.ptr.capacity - start;
+            let available = contiguous.min(self.ptr.size - (self.local_tail - self.local_head));
+            assert!(
+                len <= available,
+                "advancing ({len}) more than available space ({available})"
+            );
+        }
+
         // the len can be just right at the edge of buffer, so we need to wrap just in case
         let new_tail = self.local_tail + len;
         self.store_tail(new_tail);

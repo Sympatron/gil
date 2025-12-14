@@ -26,9 +26,9 @@ impl<T> Receiver<T> {
     /// * `Some(value)` if a value is available.
     /// * `None` if the queue is empty.
     pub fn try_recv(&mut self) -> Option<T> {
-        if self.local_head == self.local_tail {
+        if self.local_head >= self.local_tail {
             self.load_tail();
-            if self.local_head == self.local_tail {
+            if self.local_head >= self.local_tail {
                 return None;
             }
         }
@@ -48,7 +48,7 @@ impl<T> Receiver<T> {
     /// This method uses a spin loop to wait for available data in the queue.
     /// For a non-blocking alternative, use [`Receiver::try_recv`].
     pub fn recv(&mut self) -> T {
-        while self.local_head == self.local_tail {
+        while self.local_head >= self.local_tail {
             hint::spin_loop();
             self.load_tail();
         }
@@ -70,16 +70,16 @@ impl<T> Receiver<T> {
     pub async fn recv_async(&mut self) -> T {
         use std::task::Poll;
 
-        if self.local_head == self.local_tail {
+        if self.local_head >= self.local_tail {
             futures::future::poll_fn(|ctx| {
                 self.load_tail();
-                if self.local_head == self.local_tail {
+                if self.local_head >= self.local_tail {
                     self.ptr.register_receiver_waker(ctx.waker());
                     self.ptr.receiver_sleeping().store(true, Ordering::SeqCst);
 
                     // prevent lost wake
                     self.local_tail = self.ptr.tail().load(Ordering::SeqCst);
-                    if self.local_head == self.local_tail {
+                    if self.local_head >= self.local_tail {
                         return Poll::Pending;
                     }
 
@@ -117,24 +117,20 @@ impl<T> Receiver<T> {
     /// A slice containing available items starting from the current head.
     /// Note that this might not represent *all* available items if the buffer wraps around.
     pub fn read_buffer(&mut self) -> &[T] {
-        let start = self.local_head & self.ptr.mask;
-        let mut local_tail = self.local_tail & self.ptr.mask;
+        let mut available = self.local_tail - self.local_head;
 
-        // not returning early, because we will return empty buffer anyway if next == tail
-        if start == local_tail {
+        if available == 0 {
             self.load_tail();
-            local_tail = self.local_tail & self.ptr.mask;
+            available = self.local_tail - self.local_head;
         }
 
-        let end = if local_tail >= start {
-            local_tail
-        } else {
-            self.ptr.size - 1
-        };
+        let start = self.local_head & self.ptr.mask;
+        let contiguous = self.ptr.capacity - start;
+        let len = available.min(contiguous);
 
         unsafe {
             let ptr = self.ptr.exact_at(start);
-            std::slice::from_raw_parts(ptr.as_ptr(), end - start)
+            std::slice::from_raw_parts(ptr.as_ptr(), len)
         }
     }
 
@@ -149,6 +145,17 @@ impl<T> Receiver<T> {
     /// * Advancing past the available data in the buffer results in undefined behavior.
     #[inline(always)]
     pub unsafe fn advance(&mut self, len: usize) {
+        #[cfg(debug_assertions)]
+        {
+            let start = self.local_head & self.ptr.mask;
+            let contiguous = self.ptr.capacity - start;
+            let available = contiguous.min(self.local_tail - self.local_head);
+            assert!(
+                len <= available,
+                "advancing ({len}) more than available space ({available})"
+            );
+        }
+
         // the len can be just right at the edge of buffer, so we need to wrap just in case
         let new_head = self.local_head + len;
         self.store_head(new_head);

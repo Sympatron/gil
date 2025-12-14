@@ -19,30 +19,33 @@ mod test {
 
     #[test]
     fn basic() {
+        const THREADS: u32 = 3;
+        const ITER: u32 = 5;
+
         let (tx, mut rx) = channel(NonZeroUsize::new(8).unwrap());
 
         thread::scope(move |scope| {
-            for j in 0..10 {
+            for thread_id in 0..THREADS {
                 let mut tx = tx.clone();
                 scope.spawn(move || {
-                    for i in 0..10 {
-                        println!("{j}: sending {i}");
-                        tx.send(i);
-                        println!("{j}: sent {i}");
+                    for i in 0..ITER {
+                        println!("{thread_id}: sending {i}");
+                        tx.send((thread_id, i));
+                        println!("{thread_id}: sent {i}");
                     }
                 });
             }
 
             let mut sum = 0;
-            for _ in 0..10 {
-                for _ in 0..10 {
-                    println!("recving");
-                    sum += rx.recv();
-                    println!("recved");
+            for _ in 0..THREADS {
+                for _ in 0..ITER {
+                    let (thread_id, i) = rx.recv();
+                    sum += i;
+                    println!("recved: ({thread_id}:{i})");
                 }
             }
 
-            assert_eq!(sum, (10 + (10 + 1)) / 2 * 10);
+            assert_eq!(sum, (ITER + (ITER + 1)) / 2 * THREADS);
         });
     }
 }

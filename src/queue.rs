@@ -53,6 +53,7 @@ pub(crate) struct QueuePtr<T> {
     buffer: NonNull<T>,
     pub(crate) size: usize,
     pub(crate) mask: usize,
+    pub(crate) capacity: usize,
     _marker: PhantomData<T>,
 }
 
@@ -65,6 +66,7 @@ impl<T> Clone for QueuePtr<T> {
             buffer: self.buffer,
             size: self.size,
             mask: self.mask,
+            capacity: self.capacity,
             _marker: PhantomData,
         }
     }
@@ -116,6 +118,7 @@ impl<T> QueuePtr<T> {
             buffer,
             _marker: PhantomData,
             size,
+            capacity,
             mask: capacity - 1,
         }
     }

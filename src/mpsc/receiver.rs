@@ -19,12 +19,6 @@ impl<T> Receiver<T> {
         }
     }
 
-    #[inline(always)]
-    fn next_head(&self) -> usize {
-        let next = self.local_head + 1;
-        if next == self.ptr.size { 0 } else { next }
-    }
-
     pub fn recv(&mut self) -> T {
         while self.local_head == self.local_tail {
             hint::spin_loop();
@@ -34,7 +28,7 @@ impl<T> Receiver<T> {
         // SAFETY: head != tail which means queue is not empty and head has valid initialised
         //         value
         let ret = unsafe { self.ptr.get(self.local_head) };
-        let new_head = self.next_head();
+        let new_head = self.local_head + 1;
         self.store_head(new_head);
         self.local_head = new_head;
 

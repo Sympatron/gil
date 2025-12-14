@@ -14,14 +14,8 @@ impl<T> Sender<T> {
         }
     }
 
-    #[inline(always)]
-    fn next_tail(&self) -> usize {
-        let next = self.local_tail + 1;
-        if next == self.ptr.size { 0 } else { next }
-    }
-
     pub fn send(&mut self, value: T) {
-        let mut new_tail = self.next_tail();
+        let mut new_tail = self.local_tail + 1;
 
         loop {
             while new_tail == self.ptr.head().load(Ordering::Acquire) {
@@ -37,7 +31,7 @@ impl<T> Sender<T> {
                 Ok(_) => break,
             }
 
-            new_tail = self.next_tail();
+            new_tail = self.local_tail + 1;
             hint::spin_loop();
         }
 
