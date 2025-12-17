@@ -21,7 +21,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-gil = "0.3"
+gil = "0.5"
 ```
 
 ## Usage
