@@ -2,7 +2,6 @@ use std::num::NonZeroUsize;
 
 pub use self::{receiver::Receiver, sender::Sender};
 
-mod cell;
 mod queue;
 mod receiver;
 mod sender;

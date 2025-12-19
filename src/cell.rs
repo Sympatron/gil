@@ -5,16 +5,6 @@ use std::{
 
 use crate::atomic::AtomicUsize;
 
-macro_rules! _field {
-    ($ptr:expr, $($path:tt).+) => {
-        $ptr.byte_add(offset_of!(Cell<T>, $($path).+))
-    };
-
-    ($ptr:expr, $($path:tt).+, $field_ty:ty) => {
-        $ptr.byte_add(offset_of!(Cell<T>, $($path).+)).cast::<$field_ty>()
-    };
-}
-
 #[repr(align(64))]
 #[cfg_attr(all(target_arch = "aarch64", target_os = "macos"), repr(align(128)))]
 pub(crate) struct Cell<T> {
@@ -31,24 +21,24 @@ impl<T> CellPtr<T> {
     /// The value must be initialised correctly at this `index`
     #[inline(always)]
     pub(crate) unsafe fn get(&self) -> T {
-        unsafe { _field!(self.ptr, data, T).read() }
+        unsafe { _field!(Cell<T>, self.ptr, data, T).read() }
     }
 
     #[inline(always)]
     pub(crate) fn set(&self, value: T) {
-        unsafe { _field!(self.ptr, data, T).write(value) }
+        unsafe { _field!(Cell<T>, self.ptr, data, T).write(value) }
     }
 
     #[inline(always)]
     pub(crate) fn epoch(&self) -> &AtomicUsize {
-        unsafe { _field!(self.ptr, epoch, AtomicUsize).as_ref() }
+        unsafe { _field!(Cell<T>, self.ptr, epoch, AtomicUsize).as_ref() }
     }
 
     #[inline(always)]
     pub(crate) unsafe fn drop_in_place(&self) {
         if std::mem::needs_drop::<T>() {
             unsafe {
-                std::ptr::drop_in_place(_field!(self.ptr, data, T).as_ptr());
+                std::ptr::drop_in_place(_field!(Cell<T>, self.ptr, data, T).as_ptr());
             }
         }
     }

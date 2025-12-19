@@ -18,16 +18,6 @@ use crate::{
     padded::Padded,
 };
 
-macro_rules! _field {
-    ($ptr:expr, $($path:tt).+) => {
-        $ptr.byte_add(offset_of!(Queue, $($path).+))
-    };
-
-    ($ptr:expr, $($path:tt).+, $ty:ty) => {
-        $ptr.byte_add(offset_of!(Queue, $($path).+)).cast::<$ty>()
-    };
-}
-
 /// # Invariants
 /// - tail should always point to the place where we can write next to.
 // avoid re-ordering fields
@@ -59,7 +49,7 @@ pub(crate) struct QueuePtr<T> {
 
 impl<T> Clone for QueuePtr<T> {
     fn clone(&self) -> Self {
-        let rc = unsafe { _field!(self.ptr, rc, AtomicUsize).as_ref() };
+        let rc = unsafe { _field!(Queue, self.ptr, rc, AtomicUsize).as_ref() };
         rc.fetch_add(1, Ordering::AcqRel);
         Self {
             ptr: self.ptr,
@@ -132,12 +122,12 @@ impl<T> QueuePtr<T> {
 
     #[inline(always)]
     pub(crate) fn head(&self) -> &AtomicUsize {
-        unsafe { _field!(self.ptr, head.value, AtomicUsize).as_ref() }
+        unsafe { _field!(Queue, self.ptr, head.value, AtomicUsize).as_ref() }
     }
 
     #[inline(always)]
     pub(crate) fn tail(&self) -> &AtomicUsize {
-        unsafe { _field!(self.ptr, tail.value, AtomicUsize).as_ref() }
+        unsafe { _field!(Queue, self.ptr, tail.value, AtomicUsize).as_ref() }
     }
 
     #[inline(always)]
@@ -166,7 +156,7 @@ impl<T> QueuePtr<T> {
     #[inline(always)]
     pub(crate) fn register_sender_waker(&self, waker: &Waker) {
         unsafe {
-            _field!(self.ptr, sender_waker.value, AtomicWaker)
+            _field!(Queue, self.ptr, sender_waker.value, AtomicWaker)
                 .as_ref()
                 .register(waker);
         }
@@ -175,7 +165,7 @@ impl<T> QueuePtr<T> {
     #[inline(always)]
     pub(crate) fn register_receiver_waker(&self, waker: &Waker) {
         unsafe {
-            _field!(self.ptr, receiver_waker.value, AtomicWaker)
+            _field!(Queue, self.ptr, receiver_waker.value, AtomicWaker)
                 .as_ref()
                 .register(waker);
         }
@@ -184,7 +174,7 @@ impl<T> QueuePtr<T> {
     #[inline(always)]
     pub(crate) fn wake_sender(&self) {
         unsafe {
-            _field!(self.ptr, sender_waker.value, AtomicWaker)
+            _field!(Queue, self.ptr, sender_waker.value, AtomicWaker)
                 .as_ref()
                 .wake();
         }
@@ -193,7 +183,7 @@ impl<T> QueuePtr<T> {
     #[inline(always)]
     pub(crate) fn wake_receiver(&self) {
         unsafe {
-            _field!(self.ptr, receiver_waker.value, AtomicWaker)
+            _field!(Queue, self.ptr, receiver_waker.value, AtomicWaker)
                 .as_ref()
                 .wake();
         }
@@ -201,18 +191,18 @@ impl<T> QueuePtr<T> {
 
     #[inline(always)]
     pub(crate) fn sender_sleeping(&self) -> &AtomicBool {
-        unsafe { _field!(self.ptr, sender_sleeping.value, AtomicBool).as_ref() }
+        unsafe { _field!(Queue, self.ptr, sender_sleeping.value, AtomicBool).as_ref() }
     }
 
     #[inline(always)]
     pub(crate) fn receiver_sleeping(&self) -> &AtomicBool {
-        unsafe { _field!(self.ptr, receiver_sleeping.value, AtomicBool).as_ref() }
+        unsafe { _field!(Queue, self.ptr, receiver_sleeping.value, AtomicBool).as_ref() }
     }
 }
 
 impl<T> Drop for QueuePtr<T> {
     fn drop(&mut self) {
-        let rc = unsafe { _field!(self.ptr, rc, AtomicUsize).as_ref() };
+        let rc = unsafe { _field!(Queue, self.ptr, rc, AtomicUsize).as_ref() };
         if rc.fetch_sub(1, Ordering::AcqRel) == 1 {
             let (layout, _) = Self::layout(self.capacity);
 

@@ -8,19 +8,9 @@ use std::{
 use crate::{
     alloc,
     atomic::{AtomicUsize, Ordering},
-    mpsc::cell::{Cell, CellPtr},
+    cell::{Cell, CellPtr},
     padded::Padded,
 };
-
-macro_rules! _field {
-    ($ptr:expr, $($path:tt).+) => {
-        $ptr.byte_add(offset_of!(Queue, $($path).+))
-    };
-
-    ($ptr:expr, $($path:tt).+, $field_ty:ty) => {
-        $ptr.byte_add(offset_of!(Queue, $($path).+)).cast::<$field_ty>()
-    };
-}
 
 /// # Invariants
 /// - tail should always point to the place where we can write next to.
@@ -42,7 +32,7 @@ pub(crate) struct QueuePtr<T> {
 
 impl<T> Clone for QueuePtr<T> {
     fn clone(&self) -> Self {
-        let rc = unsafe { _field!(self.ptr, rc, AtomicUsize).as_ref() };
+        let rc = unsafe { _field!(Queue, self.ptr, rc, AtomicUsize).as_ref() };
         rc.fetch_add(1, Ordering::AcqRel);
         Self {
             ptr: self.ptr,
@@ -109,7 +99,7 @@ impl<T> QueuePtr<T> {
 
     #[inline(always)]
     pub(crate) fn tail(&self) -> &AtomicUsize {
-        unsafe { _field!(self.ptr, tail.value, AtomicUsize).as_ref() }
+        unsafe { _field!(Queue, self.ptr, tail.value, AtomicUsize).as_ref() }
     }
 
     #[inline(always)]
@@ -127,7 +117,7 @@ impl<T> QueuePtr<T> {
 
 impl<T> Drop for QueuePtr<T> {
     fn drop(&mut self) {
-        let rc = unsafe { _field!(self.ptr, rc, AtomicUsize).as_ref() };
+        let rc = unsafe { _field!(Queue, self.ptr, rc, AtomicUsize).as_ref() };
         if rc.fetch_sub(1, Ordering::AcqRel) == 1 {
             let (layout, _) = Self::layout(self.capacity);
 
