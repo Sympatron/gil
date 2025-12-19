@@ -1,36 +1,14 @@
 # gil
 
-**Get In Line** - A fast single-producer single-consumer (SPSC) queue with sync and async support.
-
-Inspired by [Facebook's folly's ProducerConsumerQueue](https://github.com/facebook/folly/blob/main/folly/ProducerConsumerQueue.h).
+**Get In Line** - A collection of high-performance, lock-free concurrent queues with sync and async support.
 
 > ⚠️ WIP: things **WILL** change a lot without warnings even in minor updates until v1, use at your own risk.
 
-## Features
-
-- **Lock-free**: Uses atomic operations for synchronization
-- **Single-producer, single-consumer**: Optimized for this specific use case
-- **Thread-safe**: Producer and consumer can run on different threads
-- **Blocking and non-blocking operations**: Both sync and async APIs
-- **Batch operations**: Send and receive multiple items efficiently
-- **Zero-copy operations**: Direct buffer access for maximum performance
-
-## Installation
-
-Add this to your `Cargo.toml`:
-
-```toml
-[dependencies]
-gil = "0.5"
-```
-
 ## Usage
 
-The producer and consumer can run on different threads, but there can only be one producer and only one consumer. The producer (or consumer) can be moved between threads, but cannot be shared between threads. The queue has a fixed capacity that must be specified when creating the channel.
+### Single-Producer Single-Consumer (SPSC)
 
-Consumer blocks until there is a value on the queue, or use `Receiver::try_recv` for non-blocking version. Similarly, producer blocks until there is a free slot on the queue, or use `Sender::try_send` for non-blocking version.
-
-### Basic Example (Synchronous)
+The most optimized queue for 1-to-1 thread communication.
 
 ```rust
 use std::thread;
@@ -43,18 +21,77 @@ let (mut tx, mut rx) = channel::<usize>(NonZeroUsize::new(COUNT).unwrap());
 
 let handle = thread::spawn(move || {
     for i in 0..COUNT {
-        // Block until send completes
         tx.send(i);
     }
 });
 
 for i in 0..COUNT {
-    // Block until recv completes
     let value = rx.recv();
     assert_eq!(value, i);
 }
 
 handle.join().unwrap();
+```
+
+### Multi-Producer Single-Consumer (MPSC)
+
+Useful when multiple threads need to send data to a single worker thread.
+
+```rust
+use std::thread;
+use std::num::NonZeroUsize;
+use gil::mpsc::channel;
+
+let (tx, mut rx) = channel::<usize>(NonZeroUsize::new(1024).unwrap());
+let mut handles = vec![];
+
+for i in 0..10 {
+    let mut tx_clone = tx.clone();
+    handles.push(thread::spawn(move || {
+        tx_clone.send(i);
+    }));
+}
+
+for _ in 0..10 {
+    let _ = rx.recv();
+}
+
+for handle in handles {
+    handle.join().unwrap();
+}
+```
+
+### Multi-Producer Multi-Consumer (MPMC)
+
+The most flexible queue, allowing multiple senders and multiple receivers.
+
+```rust
+use std::thread;
+use std::num::NonZeroUsize;
+use gil::mpmc::channel;
+
+let (tx, rx) = channel::<usize>(NonZeroUsize::new(1024).unwrap());
+let mut handles = vec![];
+
+// Spawn multiple producers
+for i in 0..5 {
+    let mut tx_clone = tx.clone();
+    handles.push(thread::spawn(move || {
+        tx_clone.send(i);
+    }));
+}
+
+// Spawn multiple consumers
+for _ in 0..5 {
+    let mut rx_clone = rx.clone();
+    handles.push(thread::spawn(move || {
+        let _ = rx_clone.recv();
+    }));
+}
+
+for handle in handles {
+    handle.join().unwrap();
+}
 ```
 
 ### Async Example
@@ -186,3 +223,10 @@ The code has been verified using:
 ## License
 
 MIT License - see [LICENSE](https://github.com/abhikjain360/spsc/blob/main/LICENSE) file for details.
+
+## Acknowledgements
+
+- **SPSC** was inspired by the `ProducerConsumerQueue` in the [Facebook Folly](https://github.com/facebook/folly/blob/main/folly/ProducerConsumerQueue.h) library.
+- **MPMC/MPSC** are based on the bounded queue algorithm developed by [Dmitry Vyukov](http://www.1024cores.net/home/lock-free-algorithms/queues/bounded-mpmc-queue).
+
+For more details on third-party licenses, see the [LICENSE-THIRD-PARTY](LICENSE-THIRD-PARTY) file.

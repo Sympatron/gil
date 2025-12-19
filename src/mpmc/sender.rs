@@ -2,6 +2,9 @@ use std::cmp::Ordering as Cmp;
 
 use crate::{atomic::Ordering, hint, mpmc::queue::QueuePtr, thread};
 
+/// The producer end of the MPMC queue.
+///
+/// This struct is `Clone` and `Send`. It can be shared across threads by cloning it.
 #[derive(Clone)]
 pub struct Sender<T> {
     ptr: QueuePtr<T>,
@@ -16,6 +19,10 @@ impl<T> Sender<T> {
         }
     }
 
+    /// Sends a value into the queue, blocking if necessary.
+    ///
+    /// This method uses a spin loop to wait for available space in the queue.
+    /// For a non-blocking alternative, use [`Sender::try_send`].
     pub fn send(&mut self, value: T) {
         // fetch_add means we are the only ones who can access the cell at this idx
         let tail = self.ptr.tail().fetch_add(1, Ordering::Relaxed);
@@ -38,6 +45,12 @@ impl<T> Sender<T> {
         self.local_tail = next;
     }
 
+    /// Attempts to send a value into the queue without blocking.
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` if the value was successfully sent.
+    /// * `Err(value)` if the queue is full, returning the original value.
     pub fn try_send(&mut self, value: T) -> Result<(), T> {
         let mut spin_count = 0;
 

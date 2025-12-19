@@ -2,9 +2,9 @@ use std::mem::MaybeUninit;
 
 use crate::{atomic::Ordering, hint, spsc::queue::QueuePtr};
 
-/// The producer end of the queue.
+/// The producer end of the SPSC queue.
 ///
-/// This struct is `Send` but not `Sync`. It can be moved to another thread, but cannot be shared
+/// This struct is `Send` but not `Sync` or `Clone`. It can be moved to another thread, but cannot be shared
 /// across threads.
 pub struct Sender<T> {
     ptr: QueuePtr<T>,

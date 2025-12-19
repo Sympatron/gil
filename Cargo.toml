@@ -36,6 +36,10 @@ harness = false
 name = "mpsc_benchmark"
 harness = false
 
+[[bench]]
+name = "mpmc_benchmark"
+harness = false
+
 [dev-dependencies]
 criterion = { version = "0.8.0", features = [
     "async",

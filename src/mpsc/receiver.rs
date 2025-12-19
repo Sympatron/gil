@@ -17,6 +17,10 @@ impl<T> Receiver<T> {
         }
     }
 
+    /// Receives a value from the queue, blocking if necessary.
+    ///
+    /// This method uses a spin loop to wait for available data in the queue.
+    /// For a non-blocking alternative, use [`Receiver::try_recv`].
     pub fn recv(&mut self) -> T {
         let next_head = self.local_head.wrapping_add(1);
 
@@ -41,6 +45,12 @@ impl<T> Receiver<T> {
         ret
     }
 
+    /// Attempts to receive a value from the queue without blocking.
+    ///
+    /// # Returns
+    ///
+    /// * `Some(value)` if a value is available.
+    /// * `None` if the queue is empty.
     pub fn try_recv(&mut self) -> Option<T> {
         let next_head = self.local_head.wrapping_add(1);
 

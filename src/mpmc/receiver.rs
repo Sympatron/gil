@@ -1,5 +1,8 @@
 use crate::{atomic::Ordering, hint, mpmc::queue::QueuePtr, thread};
 
+/// The consumer end of the MPMC queue.
+///
+/// This struct is `Clone` and `Send`. It can be shared across threads by cloning it.
 #[derive(Clone)]
 pub struct Receiver<T> {
     ptr: QueuePtr<T>,
@@ -14,6 +17,10 @@ impl<T> Receiver<T> {
         }
     }
 
+    /// Receives a value from the queue, blocking if necessary.
+    ///
+    /// This method uses a spin loop to wait for available data in the queue.
+    /// For a non-blocking alternative, use [`Receiver::try_recv`].
     pub fn recv(&mut self) -> T {
         let head = self.ptr.head().fetch_add(1, Ordering::Relaxed);
         let next = head.wrapping_add(1);
@@ -37,6 +44,12 @@ impl<T> Receiver<T> {
         ret
     }
 
+    /// Attempts to receive a value from the queue without blocking.
+    ///
+    /// # Returns
+    ///
+    /// * `Some(value)` if a value is available.
+    /// * `None` if the queue is empty.
     pub fn try_recv(&mut self) -> Option<T> {
         use std::cmp::Ordering as Cmp;
         let mut spin_count = 0;

@@ -7,6 +7,26 @@ mod queue;
 mod receiver;
 mod sender;
 
+/// Creates a new multi-producer single-consumer (MPSC) queue.
+///
+/// The queue has a fixed capacity and is lock-free.
+///
+/// # Arguments
+///
+/// * `capacity` - The capacity of the queue.
+///
+/// # Returns
+///
+/// A tuple containing the [`Sender`] and [`Receiver`] handles.
+///
+/// # Examples
+///
+/// ```
+/// use std::num::NonZeroUsize;
+/// use gil::mpsc::channel;
+///
+/// let (tx, rx) = channel::<usize>(NonZeroUsize::new(1024).unwrap());
+/// ```
 pub fn channel<T>(capacity: NonZeroUsize) -> (Sender<T>, Receiver<T>) {
     let queue = queue::QueuePtr::with_size(capacity);
     (Sender::new(queue.clone()), Receiver::new(queue))
