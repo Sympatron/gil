@@ -16,6 +16,7 @@ pub(crate) use loom::{
     thread,
 };
 
+pub mod mpmc;
 pub mod mpsc;
 mod padded;
 pub mod spsc;

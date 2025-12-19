@@ -23,7 +23,7 @@ impl<T> Receiver<T> {
         let cell = self.ptr.at(self.local_head);
         let mut spin_count = 0;
         while cell.epoch().load(Ordering::Acquire) < next_head {
-            if spin_count < 128 {
+            if spin_count < 16 {
                 hint::spin_loop();
                 spin_count += 1;
             } else {

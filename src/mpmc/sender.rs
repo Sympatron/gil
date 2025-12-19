@@ -1,6 +1,6 @@
 use std::cmp::Ordering as Cmp;
 
-use crate::{atomic::Ordering, hint, mpsc::queue::QueuePtr, thread};
+use crate::{atomic::Ordering, hint, mpmc::queue::QueuePtr, thread};
 
 #[derive(Clone)]
 pub struct Sender<T> {
