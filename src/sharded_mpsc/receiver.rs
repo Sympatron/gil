@@ -40,13 +40,14 @@ impl<T> Receiver<T> {
         let start = self.next_receiver;
         loop {
             let ret = self.receivers[self.next_receiver].try_recv();
-            if ret.is_some() {
-                return ret;
-            }
 
             self.next_receiver += 1;
             if self.next_receiver == self.max_shards {
                 self.next_receiver = 0;
+            }
+
+            if ret.is_some() {
+                return ret;
             }
 
             if self.next_receiver == start {
@@ -54,4 +55,36 @@ impl<T> Receiver<T> {
             }
         }
     }
+
+    pub fn read_buffer(&mut self) -> &[T] {
+        let start = self.next_receiver;
+        loop {
+            let ret = self.receivers[self.next_receiver].read_buffer();
+
+            self.next_receiver += 1;
+            if self.next_receiver == self.max_shards {
+                self.next_receiver = 0;
+            }
+
+            if !ret.is_empty() {
+                return unsafe { std::mem::transmute::<&[T], &[T]>(ret) };
+            }
+
+            if self.next_receiver == start {
+                return &[];
+            }
+        }
+    }
+
+    pub unsafe fn advance(&mut self, len: usize) {
+        let prev = if self.next_receiver == 0 {
+            self.max_shards - 1
+        } else {
+            self.next_receiver - 1
+        };
+
+        unsafe { self.receivers[prev].advance(len) };
+    }
 }
+
+unsafe impl<T> Send for Receiver<T> {}

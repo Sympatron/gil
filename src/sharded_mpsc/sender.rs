@@ -63,3 +63,5 @@ impl<T> Sender<T> {
         unsafe { self.inner.commit(len) }
     }
 }
+
+unsafe impl<T> Send for Sender<T> {}
