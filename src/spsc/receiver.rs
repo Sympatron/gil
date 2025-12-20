@@ -1,4 +1,4 @@
-use crate::{atomic::Ordering, hint, spsc::queue::QueuePtr};
+use crate::{atomic::Ordering, spsc::queue::QueuePtr};
 
 /// The consumer end of the SPSC queue.
 ///
@@ -48,8 +48,9 @@ impl<T> Receiver<T> {
     /// This method uses a spin loop to wait for available data in the queue.
     /// For a non-blocking alternative, use [`Receiver::try_recv`].
     pub fn recv(&mut self) -> T {
+        let mut backoff = crate::Backoff::new();
         while self.local_head == self.local_tail {
-            hint::spin_loop();
+            backoff.backoff();
             self.load_tail();
         }
 

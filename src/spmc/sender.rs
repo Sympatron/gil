@@ -1,4 +1,4 @@
-use crate::{atomic::Ordering, hint, spmc::queue::QueuePtr, thread};
+use crate::{atomic::Ordering, spmc::queue::QueuePtr};
 
 pub struct Sender<T> {
     ptr: QueuePtr<T>,
@@ -15,15 +15,9 @@ impl<T> Sender<T> {
 
     pub fn send(&mut self, value: T) {
         let cell = self.ptr.at(self.local_tail);
-        let mut spin_count = 0;
+        let mut backoff = crate::Backoff::new();
         while cell.epoch().load(Ordering::Acquire) != self.local_tail {
-            if spin_count < 128 {
-                hint::spin_loop();
-                spin_count += 1;
-            } else {
-                spin_count = 0;
-                thread::yield_now();
-            }
+            backoff.backoff();
         }
 
         let next = self.local_tail.wrapping_add(1);

@@ -1,6 +1,6 @@
 use std::mem::MaybeUninit;
 
-use crate::{atomic::Ordering, hint, spsc::queue::QueuePtr};
+use crate::{atomic::Ordering, spsc::queue::QueuePtr};
 
 /// The producer end of the SPSC queue.
 ///
@@ -51,8 +51,9 @@ impl<T> Sender<T> {
     pub fn send(&mut self, value: T) {
         let new_tail = self.local_tail.wrapping_add(1);
 
+        let mut backoff = crate::Backoff::new();
         while new_tail > self.max_tail() {
-            hint::spin_loop();
+            backoff.backoff();
             self.load_head();
         }
 

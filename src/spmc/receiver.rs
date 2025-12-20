@@ -1,4 +1,4 @@
-use crate::{atomic::Ordering, hint, spmc::queue::QueuePtr, thread};
+use crate::{atomic::Ordering, spmc::queue::QueuePtr};
 
 pub struct Receiver<T> {
     ptr: QueuePtr<T>,
@@ -18,15 +18,9 @@ impl<T> Receiver<T> {
         let next_head = head.wrapping_add(1);
 
         let cell = self.ptr.at(head);
-        let mut spin_count = 0;
+        let mut backoff = crate::Backoff::new();
         while cell.epoch().load(Ordering::Acquire) != next_head {
-            if spin_count < 128 {
-                hint::spin_loop();
-                spin_count += 1;
-            } else {
-                spin_count = 0;
-                thread::yield_now();
-            }
+            backoff.backoff();
         }
 
         let ret = unsafe { cell.get() };
@@ -39,7 +33,7 @@ impl<T> Receiver<T> {
     pub fn try_recv(&mut self) -> Option<T> {
         use std::cmp::Ordering as Cmp;
 
-        let mut spin_count = 0;
+        let mut backoff = crate::Backoff::with_spin_count(16);
         loop {
             let cell = self.ptr.at(self.local_head);
             let epoch = cell.epoch().load(Ordering::Acquire);
@@ -69,13 +63,7 @@ impl<T> Receiver<T> {
                 Cmp::Greater => self.local_head = self.ptr.head().load(Ordering::Relaxed),
             }
 
-            if spin_count < 16 {
-                hint::spin_loop();
-                spin_count += 1;
-            } else {
-                spin_count = 0;
-                thread::yield_now();
-            }
+            backoff.backoff();
         }
     }
 }

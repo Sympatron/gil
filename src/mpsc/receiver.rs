@@ -1,4 +1,4 @@
-use crate::{atomic::Ordering, hint, mpsc::queue::QueuePtr, thread};
+use crate::{atomic::Ordering, mpsc::queue::QueuePtr};
 
 /// The consumer end of the queue.
 ///
@@ -25,14 +25,9 @@ impl<T> Receiver<T> {
         let next_head = self.local_head.wrapping_add(1);
 
         let cell = self.ptr.at(self.local_head);
-        let mut spin_count = 0;
+        let mut backoff = crate::Backoff::with_spin_count(16);
         while cell.epoch().load(Ordering::Acquire) < next_head {
-            if spin_count < 16 {
-                hint::spin_loop();
-                spin_count += 1;
-            } else {
-                thread::yield_now();
-            }
+            backoff.backoff();
         }
 
         let ret = unsafe { cell.get() };

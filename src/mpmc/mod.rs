@@ -123,8 +123,9 @@ mod test {
                 let mut tx = tx.clone();
                 s.spawn(move || {
                     for i in 0..MESSAGES {
+                        let mut backoff = crate::Backoff::with_spin_count(1);
                         while tx.try_send(t * MESSAGES + i).is_err() {
-                            std::thread::yield_now();
+                            backoff.backoff();
                         }
                     }
                 });
@@ -136,13 +137,14 @@ mod test {
                 let total_sum = total_sum.clone();
                 s.spawn(move || {
                     let mut count = 0;
+                    let mut backoff = crate::Backoff::with_spin_count(1);
                     while count < (SENDERS * MESSAGES / RECEIVERS) {
                         if let Some(val) = rx.try_recv() {
                             total_received.fetch_add(1, Ordering::SeqCst);
                             total_sum.fetch_add(val, Ordering::SeqCst);
                             count += 1;
                         } else {
-                            std::thread::yield_now();
+                            backoff.backoff();
                         }
                     }
                 });

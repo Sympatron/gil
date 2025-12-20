@@ -1,4 +1,4 @@
-use crate::{atomic::Ordering, hint, mpsc::queue::QueuePtr, thread};
+use crate::{atomic::Ordering, mpsc::queue::QueuePtr};
 
 /// The producer end of the MPSC queue.
 ///
@@ -27,15 +27,9 @@ impl<T> Sender<T> {
         let next = tail.wrapping_add(1);
 
         let cell = self.ptr.at(tail);
-        let mut spin_count = 0;
+        let mut backoff = crate::Backoff::new();
         while cell.epoch().load(Ordering::Acquire) != tail {
-            if spin_count < 128 {
-                hint::spin_loop();
-                spin_count += 1;
-            } else {
-                spin_count = 0;
-                thread::yield_now();
-            }
+            backoff.backoff();
         }
 
         cell.set(value);
@@ -52,7 +46,7 @@ impl<T> Sender<T> {
     pub fn try_send(&mut self, value: T) -> Result<(), T> {
         use std::cmp::Ordering as Cmp;
 
-        let mut spin_count = 0;
+        let mut backoff = crate::Backoff::with_spin_count(16);
 
         let cell = loop {
             let cell = self.ptr.at(self.local_tail);
@@ -83,13 +77,7 @@ impl<T> Sender<T> {
                 Cmp::Greater => self.local_tail = self.ptr.tail().load(Ordering::Relaxed),
             };
 
-            if spin_count < 16 {
-                hint::spin_loop();
-                spin_count += 1;
-            } else {
-                spin_count = 0;
-                thread::yield_now();
-            }
+            backoff.backoff();
         };
 
         cell.set(value);

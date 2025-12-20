@@ -33,3 +33,6 @@ pub mod mpsc;
 mod padded;
 pub mod spmc;
 pub mod spsc;
+mod backoff;
+
+pub use backoff::Backoff;
