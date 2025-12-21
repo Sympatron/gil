@@ -22,6 +22,7 @@
 use std::num::NonZeroUsize;
 
 pub(crate) use self::queue::QueuePtr;
+pub(crate) mod shards;
 pub use self::{receiver::Receiver, sender::Sender};
 
 mod queue;

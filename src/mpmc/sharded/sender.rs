@@ -1,8 +1,7 @@
 use core::{mem::MaybeUninit, num::NonZeroUsize, ptr::NonNull};
 
 use crate::{
-    mpmc::sharded::ShardsPtr,
-    spsc,
+    spsc::{self, shards::ShardsPtr},
     sync::atomic::{AtomicUsize, Ordering},
 };
 

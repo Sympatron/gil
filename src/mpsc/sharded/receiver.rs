@@ -1,6 +1,7 @@
-use core::ptr::NonNull;
-
-use crate::{Backoff, spsc};
+use crate::{
+    Backoff,
+    spsc::{self, shards::ShardsPtr},
+};
 
 /// The receiving half of a sharded MPSC channel.
 ///
@@ -12,13 +13,11 @@ pub struct Receiver<T> {
 }
 
 impl<T> Receiver<T> {
-    /// # Safety/Warning
-    /// This **does not** clone the shard's QueuePtr, instead reads them.
-    pub(crate) unsafe fn new(shards: NonNull<spsc::QueuePtr<T>>, max_shards: usize) -> Self {
+    pub(crate) fn new(shards: ShardsPtr<T>, max_shards: usize) -> Self {
         let mut receivers = Box::new_uninit_slice(max_shards);
 
         for i in 0..max_shards {
-            let shard = unsafe { shards.add(i).read() };
+            let shard = shards.clone_queue_ptr(i);
             receivers[i].write(spsc::Receiver::new(shard));
         }
 

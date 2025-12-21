@@ -1,7 +1,7 @@
 use core::{mem::MaybeUninit, num::NonZeroUsize, ptr::NonNull};
 
 use crate::{
-    spsc,
+    spsc::{self, shards::ShardsPtr},
     sync::atomic::{AtomicUsize, Ordering},
 };
 
@@ -11,13 +11,13 @@ use crate::{
 /// instance to a different, unused shard.
 pub struct Sender<T> {
     inner: spsc::Sender<T>,
-    shards: NonNull<spsc::QueuePtr<T>>,
+    shards: ShardsPtr<T>,
     num_senders: NonNull<AtomicUsize>,
     max_shards: usize,
 }
 
 impl<T> Sender<T> {
-    pub(crate) fn new(shards: NonNull<spsc::QueuePtr<T>>, max_shards: NonZeroUsize) -> Self {
+    pub(crate) fn new(shards: ShardsPtr<T>, max_shards: NonZeroUsize) -> Self {
         let num_senders_ptr = Box::into_raw(Box::new(AtomicUsize::new(0)));
         unsafe {
             let num_senders = NonNull::new_unchecked(num_senders_ptr);
@@ -29,11 +29,11 @@ impl<T> Sender<T> {
     ///
     /// Returns `Some(Sender)` if there is an available shard to bind to, otherwise returns `None`.
     pub fn clone(&self) -> Option<Self> {
-        unsafe { Self::init(self.shards, self.max_shards, self.num_senders) }
+        unsafe { Self::init(self.shards.clone(), self.max_shards, self.num_senders) }
     }
 
     pub(crate) unsafe fn init(
-        shards: NonNull<spsc::QueuePtr<T>>,
+        shards: ShardsPtr<T>,
         max_shards: usize,
         num_senders: NonNull<AtomicUsize>,
     ) -> Option<Self> {
@@ -44,7 +44,7 @@ impl<T> Sender<T> {
             return None;
         }
 
-        let shard_ptr = unsafe { shards.add(next_shard).as_ref() }.clone();
+        let shard_ptr = shards.clone_queue_ptr(next_shard);
         let inner = spsc::Sender::new(shard_ptr);
 
         Some(Self {

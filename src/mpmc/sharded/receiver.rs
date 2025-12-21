@@ -2,9 +2,8 @@ use core::ptr::{self, NonNull};
 
 use crate::{
     Backoff,
-    mpmc::sharded::ShardsPtr,
     padded::Padded,
-    spsc,
+    spsc::{self, shards::ShardsPtr},
     sync::atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 
@@ -198,7 +197,7 @@ impl<T> Receiver<T> {
     /// # Safety
     ///
     /// - `self.read_buffer` must've been called before this, and it should've returned a non-empty
-    ///    slice
+    ///   slice
     /// - this should be called **only once** after `self.read_buffer` returned a non-empty slice.
     unsafe fn advance(&mut self, len: usize) {
         // SAFETY: caller guarantees that read_buffer was called before, and it returned a buffer

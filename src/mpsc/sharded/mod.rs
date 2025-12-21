@@ -19,9 +19,9 @@
 //!     *   **Ordering:** Messages are FIFO within a shard, but there is no strict ordering between messages
 //!         sent to different shards.
 
-use std::{num::NonZeroUsize, ptr::NonNull};
+use core::num::NonZeroUsize;
 
-use crate::spsc;
+use crate::spsc::shards::ShardsPtr;
 
 mod receiver;
 mod sender;
@@ -48,17 +48,12 @@ pub fn channel<T>(
         "number of shards must be a power of 2"
     );
 
-    let mut shards = Box::new_uninit_slice(max_shards.get());
-    for i in 0..max_shards.get() {
-        shards[i].write(spsc::QueuePtr::<T>::with_size(capacity_per_shard));
-    }
-    // SAFETY: Box::new was valid
-    let shards = unsafe { NonNull::new_unchecked(Box::into_raw(shards)).cast() };
+    let shards = ShardsPtr::new(max_shards, capacity_per_shard);
 
-    // SAFETY: Sender::init(..) will clone, while Receiver::new(..) will move
-    (sender::Sender::new(shards, max_shards), unsafe {
-        receiver::Receiver::new(shards, max_shards.get())
-    })
+    (
+        sender::Sender::new(shards.clone(), max_shards),
+        receiver::Receiver::new(shards, max_shards.get()),
+    )
 }
 
 #[cfg(all(test, not(feature = "loom")))]
