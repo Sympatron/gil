@@ -103,7 +103,7 @@ For high-throughput scenarios where multiple threads access the queue concurrent
 ```rust
 use std::thread;
 use std::num::NonZeroUsize;
-use gil::sharded_mpmc::channel;
+use gil::mpmc::sharded::channel;
 
 let max_shards = NonZeroUsize::new(8).unwrap();
 let capacity_per_shard = NonZeroUsize::new(128).unwrap();

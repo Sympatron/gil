@@ -5,6 +5,7 @@ pub use self::{receiver::Receiver, sender::Sender};
 mod queue;
 mod receiver;
 mod sender;
+pub mod sharded;
 
 /// Creates a new multi-producer multi-consumer (MPMC) queue.
 ///

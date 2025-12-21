@@ -9,7 +9,7 @@ use std::{
 use criterion::{
     BenchmarkGroup, Criterion, Throughput, criterion_group, criterion_main, measurement::WallTime,
 };
-use gil::sharded_mpsc::channel;
+use gil::mpsc::sharded::channel;
 
 /// A 1024-byte payload for benchmarking large object transfers
 #[derive(Clone, Copy)]
@@ -43,7 +43,7 @@ fn benchmark(c: &mut Criterion) {
     const SENDER_COUNTS: [usize; 3] = [1, 2, 4];
 
     // ==================== PUSH LATENCY ====================
-    let mut group = make_group(c, "sharded_mpsc/push_latency");
+    let mut group = make_group(c, "mpsc/sharded/push_latency");
 
     for size in SIZES {
         for &sender_count in &SENDER_COUNTS {
@@ -208,7 +208,7 @@ fn benchmark(c: &mut Criterion) {
 
     // Throughput for usize (8 bytes)
     {
-        let mut group = make_group(c, "sharded_mpsc/throughput/payload_8");
+        let mut group = make_group(c, "mpsc/sharded/throughput/payload_8");
         group.throughput(Throughput::ElementsAndBytes {
             elements: ELEMENTS as u64,
             bytes: (ELEMENTS * size_of::<usize>()) as u64,
@@ -327,7 +327,7 @@ fn benchmark(c: &mut Criterion) {
     // Throughput for 1024-byte payload
     {
         const LARGE_ELEMENTS: usize = 100_000;
-        let mut group = make_group(c, "sharded_mpsc/throughput/payload_1024");
+        let mut group = make_group(c, "mpsc/sharded/throughput/payload_1024");
         group.throughput(Throughput::ElementsAndBytes {
             elements: LARGE_ELEMENTS as u64,
             bytes: (LARGE_ELEMENTS * size_of::<Payload1024>()) as u64,

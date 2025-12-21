@@ -1,4 +1,4 @@
-use gil::sharded_mpmc::channel;
+use gil::mpmc::sharded::channel;
 use std::{hint::black_box, num::NonZeroUsize, thread::spawn, time::SystemTime};
 
 fn main() {
